@@ -18,7 +18,7 @@ class CreateDataset(Dataset):
         self.label = torch.Tensor(label)
 
         self.extra_feat = 'None'
-        if extra_feat != 'None':
+        if isinstance(extra_feat, np.ndarray):
             extra_feat, _ = create_rnn_data_multi(extra_feat,lb,pt)
             self.extra_feat = torch.Tensor(extra_feat)
         self.device = device
