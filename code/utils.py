@@ -117,6 +117,9 @@ def read_npy_data(args):
 
     full_data = np.concatenate([train_data, valid_data, test_data], axis=0)
     args.npy_feat_dim = full_data.shape[2]
+    args.npy_train_len = train_data.shape[0]
+    args.npy_valid_len = valid_data.shape[0]
+    args.npy_test_len = test_data.shape[0]
     feat = full_data[:, :, 0]
     extra_feat = full_data[:, :, 1:]
     time = pd.to_datetime(np.arange(full_data.shape[0]), unit='h')
@@ -225,26 +228,27 @@ def split_cv(args,time, feat,train_ratio=0.8, valid_ratio=0.1, test_ratio=0.1,ex
     """
     assert len(time) == len(feat)
     if args.use_npy:
-        fold = None
+        train_end = args.npy_train_len
+        valid_end = train_end + args.npy_valid_len
+        test_end = valid_end + args.npy_test_len
+        train_feat = feat[:train_end]
+        valid_feat = feat[train_end:valid_end]
+        test_feat = feat[valid_end:test_end]
     else:
         fold = args.fold
-    month_list = list(time.month.unique())
-    if not args.use_npy:
+        month_list = list(time.month.unique())
         assert args.total_fold == len(month_list)
         fold_time = time.month.isin(month_list[0:fold]).sum()
-    else:
-        fold_time = len(time)
 
-    train_end = int(fold_time * train_ratio)
-    valid_start = train_end
-    valid_end = int(valid_start + fold_time * valid_ratio)
-    test_start = valid_end
-    test_end = int(fold_time)
+        train_end = int(fold_time * train_ratio)
+        valid_start = train_end
+        valid_end = int(valid_start + fold_time * valid_ratio)
+        test_start = valid_end
+        test_end = int(fold_time)
 
-
-    train_feat = feat[:train_end]
-    valid_feat = feat[valid_start:valid_end]
-    test_feat = feat[test_start:test_end]
+        train_feat = feat[:train_end]
+        valid_feat = feat[valid_start:valid_end]
+        test_feat = feat[test_start:test_end]
 
     scaler = 'None'
 
@@ -267,9 +271,15 @@ def split_cv(args,time, feat,train_ratio=0.8, valid_ratio=0.1, test_ratio=0.1,ex
             test_feat = test_feat[:, node_idx].reshape(-1, 1)
 
     train_extra_feat, valid_extra_feat, test_extra_feat = 'None','None','None'
-    if extra_feat != 'None':
-        train_extra_feat = extra_feat[:train_end]
-        valid_extra_feat = extra_feat[valid_start:valid_end]
-        test_extra_feat = extra_feat[test_start:test_end]
+    if isinstance(extra_feat, np.ndarray):
+        if args.use_npy:
+            train_extra_feat = extra_feat[:train_end]
+            valid_extra_feat = extra_feat[train_end:valid_end]
+            test_extra_feat = extra_feat[valid_end:test_end]
+        else:
+            train_extra_feat = extra_feat[:train_end]
+            valid_extra_feat = extra_feat[valid_start:valid_end]
+            test_extra_feat = extra_feat[test_start:test_end]
+
 
     return train_feat, valid_feat, test_feat, train_extra_feat, valid_extra_feat, test_extra_feat,scaler
