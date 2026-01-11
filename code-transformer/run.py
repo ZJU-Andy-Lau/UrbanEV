@@ -121,6 +121,7 @@ if __name__ == '__main__':
         args.data = 'npy'
         args.features = 'M'
         args.pred_len = 12
+        args.fold = 0
         args.label_len = min(args.label_len, args.seq_len)
         args.enc_in = args.npy_feat_dim
         args.dec_in = 1
