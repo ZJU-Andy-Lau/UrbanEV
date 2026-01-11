@@ -19,7 +19,7 @@ class CreateDataset(Dataset):
 
         self.extra_feat = 'None'
         if extra_feat != 'None':
-            extra_feat, _ = create_rnn_data(extra_feat,lb,pt)
+            extra_feat, _ = create_rnn_data_multi(extra_feat,lb,pt)
             self.extra_feat = torch.Tensor(extra_feat)
         self.device = device
 
@@ -30,7 +30,7 @@ class CreateDataset(Dataset):
         output_occ = torch.transpose(self.occ[idx, :, :], 0, 1).to(self.device)
         output_label = self.label[idx, :].to(self.device)
         if self.extra_feat != 'None':
-            output_extra_feat = torch.transpose(self.extra_feat[idx, :, :], 0, 1).to(self.device)
+            output_extra_feat = torch.transpose(self.extra_feat[idx, :, :, :], 0, 1).to(self.device)
             return output_occ, output_label,output_extra_feat
         else:
             return output_occ, output_label
@@ -54,6 +54,8 @@ def read_data(args):
     """
     Read and preprocess the dataset for model input.
     """
+    if args.use_npy:
+        return read_npy_data(args)
 
     # Load datasets
     inf = pd.read_csv('../data/inf.csv', header=0, index_col=None)
@@ -108,6 +110,23 @@ def read_data(args):
     return np.array(feat), np.array(adj), extra_feat, time
 
 
+def read_npy_data(args):
+    train_data = np.load(args.npy_train)
+    valid_data = np.load(args.npy_valid)
+    test_data = np.load(args.npy_test)
+
+    full_data = np.concatenate([train_data, valid_data, test_data], axis=0)
+    args.npy_feat_dim = full_data.shape[2]
+    feat = full_data[:, :, 0]
+    extra_feat = full_data[:, :, 1:]
+    time = pd.to_datetime(np.arange(full_data.shape[0]), unit='h')
+
+    adj = pd.read_csv('../data/adj.csv', header=0, index_col=None)
+    adj.index = adj.columns
+
+    return np.array(feat), np.array(adj), extra_feat, time
+
+
 def set_seed(seed, flag):
     if flag:
         torch.manual_seed(seed)
@@ -129,14 +148,17 @@ def division(data, train_rate=0.7, valid_rate=0.2, test_rate=0.1):
 def load_net(args, adj, device,occ):
     adj_dense  = torch.Tensor(adj).to(device)
     num_node = occ.shape[1] if args.pred_type =='region' else 1
-    n_fea = 1
-    if args.add_feat == 'all':
-        n_fea = 8
-    elif args.add_feat == 'None':
-        n_fea = 1
+    if args.use_npy:
+        n_fea = args.npy_feat_dim
     else:
-        for _ in args.add_feat.split('+'):
-            n_fea += 1
+        n_fea = 1
+        if args.add_feat == 'all':
+            n_fea = 8
+        elif args.add_feat == 'None':
+            n_fea = 1
+        else:
+            for _ in args.add_feat.split('+'):
+                n_fea += 1
     if args.model == 'lstm':
         model = baselines.Lstm(args.seq_len, n_fea, node=num_node).to(device)
     elif args.model == 'lo':
@@ -158,6 +180,15 @@ def load_net(args, adj, device,occ):
 
 
 def create_rnn_data(dataset, lookback, predict_time):
+    x = []
+    y = []
+    for i in range(len(dataset) - lookback - predict_time):
+        x.append(dataset[i:i + lookback])
+        y.append(dataset[i + lookback + predict_time - 1])
+    return np.array(x), np.array(y)
+
+
+def create_rnn_data_multi(dataset, lookback, predict_time):
     x = []
     y = []
     for i in range(len(dataset) - lookback - predict_time):
@@ -193,10 +224,16 @@ def split_cv(args,time, feat,train_ratio=0.8, valid_ratio=0.1, test_ratio=0.1,ex
     Split dataset based on time for time-series rolling cross-validation.
     """
     assert len(time) == len(feat)
-    fold = args.fold
+    if args.use_npy:
+        fold = None
+    else:
+        fold = args.fold
     month_list = list(time.month.unique())
-    assert args.total_fold == len(month_list)
-    fold_time = time.month.isin(month_list[0:fold]).sum()
+    if not args.use_npy:
+        assert args.total_fold == len(month_list)
+        fold_time = time.month.isin(month_list[0:fold]).sum()
+    else:
+        fold_time = len(time)
 
     train_end = int(fold_time * train_ratio)
     valid_start = train_end
@@ -212,14 +249,14 @@ def split_cv(args,time, feat,train_ratio=0.8, valid_ratio=0.1, test_ratio=0.1,ex
     scaler = 'None'
 
     if args.pred_type == 'region':
-        if args.feat != 'occ':
+        if args.feat != 'occ' and not args.use_npy:
             scaler = StandardScaler()
             train_feat = scaler.fit_transform(train_feat)
             valid_feat = scaler.transform(valid_feat)
             test_feat = scaler.transform(test_feat)
     else:
         node_idx = int(args.pred_type)
-        if args.feat != 'occ':
+        if args.feat != 'occ' and not args.use_npy:
             scaler = StandardScaler()
             train_feat = scaler.fit_transform(train_feat[:,node_idx].reshape(-1,1))
             valid_feat = scaler.transform(valid_feat[:,node_idx].reshape(-1,1))

@@ -96,6 +96,11 @@ if __name__ == '__main__':
     parser.add_argument('--add_feat', type=str, default=None, help="Whether to use additional features for prediction")
     parser.add_argument('--fold', type=int, default=0, help="The fold number of data to train with")
     parser.add_argument('--feat', type=str, default='occ', help="The type of data to use for prediction")
+    parser.add_argument('--use_npy', action='store_true', default=False, help="Use npy feature files")
+    parser.add_argument('--npy_train', type=str, default='../data/features_train_wea_poi.npy', help="Path to train npy file")
+    parser.add_argument('--npy_valid', type=str, default='../data/features_valid_wea_poi.npy', help="Path to valid npy file")
+    parser.add_argument('--npy_test', type=str, default='../data/features_test_wea_poi.npy', help="Path to test npy file")
+    parser.add_argument('--npy_feat_dim', type=int, default=20, help="Feature dimension in npy files")
 
 
 
@@ -112,7 +117,15 @@ if __name__ == '__main__':
         f"Running {args.model} with feat={args.feat}, pre_l={args.pred_len}, fold={args.fold}, add_feat"
         f"={args.add_feat}, "
         f"pred_type(node)={args.pred_type}")
-    if args.add_feat != 'None':
+    if args.use_npy:
+        args.data = 'npy'
+        args.features = 'M'
+        args.pred_len = 12
+        args.label_len = min(args.label_len, args.seq_len)
+        args.enc_in = args.npy_feat_dim
+        args.dec_in = 1
+        args.c_out = 1
+    elif args.add_feat != 'None':
         args.data_path = f'{args.feat}-{args.add_feat}.csv'
         add_num = pd.read_csv(args.root_path + args.data_path).iloc[:, 1 + NODE_NUM:].shape[1]
         args.enc_in = NODE_NUM + add_num

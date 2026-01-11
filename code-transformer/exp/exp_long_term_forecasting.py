@@ -61,9 +61,13 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                 # outputs = outputs[:, -self.args.pred_len:, f_dim:]
                 # batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
 
-                f_dim = 275 if self.args.features == 'M' else 1
-                outputs = outputs[:, -self.args.pred_len:, :f_dim]
-                batch_y = batch_y[:, -self.args.pred_len:, :f_dim].to(self.device)
+                f_dim = self.args.c_out
+                if self.args.use_npy:
+                    outputs = outputs[:, -self.args.pred_len:, -f_dim:]
+                    batch_y = batch_y[:, -self.args.pred_len:, -f_dim:].to(self.device)
+                else:
+                    outputs = outputs[:, -self.args.pred_len:, :f_dim]
+                    batch_y = batch_y[:, -self.args.pred_len:, :f_dim].to(self.device)
 
                 pred = outputs.detach().cpu()
                 true = batch_y.detach().cpu()
@@ -122,9 +126,13 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                         # outputs = outputs[:, -self.args.pred_len:, f_dim:]
                         # batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
 
-                        f_dim = 275 if self.args.features == 'M' else 1
-                        outputs = outputs[:, -self.args.pred_len:, :f_dim]
-                        batch_y = batch_y[:, -self.args.pred_len:, :f_dim].to(self.device)
+                        f_dim = self.args.c_out
+                        if self.args.use_npy:
+                            outputs = outputs[:, -self.args.pred_len:, -f_dim:]
+                            batch_y = batch_y[:, -self.args.pred_len:, -f_dim:].to(self.device)
+                        else:
+                            outputs = outputs[:, -self.args.pred_len:, :f_dim]
+                            batch_y = batch_y[:, -self.args.pred_len:, :f_dim].to(self.device)
 
                         loss = criterion(outputs, batch_y)
                         train_loss.append(loss.item())
@@ -135,9 +143,13 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                     # outputs = outputs[:, -self.args.pred_len:, f_dim:]
                     # batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
 
-                    f_dim = 275 if self.args.features == 'M' else 1
-                    outputs = outputs[:, -self.args.pred_len:, :f_dim]
-                    batch_y = batch_y[:, -self.args.pred_len:, :f_dim].to(self.device)
+                    f_dim = self.args.c_out
+                    if self.args.use_npy:
+                        outputs = outputs[:, -self.args.pred_len:, -f_dim:]
+                        batch_y = batch_y[:, -self.args.pred_len:, -f_dim:].to(self.device)
+                    else:
+                        outputs = outputs[:, -self.args.pred_len:, :f_dim]
+                        batch_y = batch_y[:, -self.args.pred_len:, :f_dim].to(self.device)
 
                     # outputs = outputs[:, -1:, f_dim:]
                     # batch_y = batch_y[:, -1:, f_dim:].to(self.device)
@@ -209,7 +221,6 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                 else:
                     outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
-                f_dim = 275 if self.args.features == 'M' else 1
                 outputs = outputs[:, -self.args.pred_len:, :]
                 batch_y = batch_y[:, -self.args.pred_len:, :].to(self.device)
                 outputs = outputs.detach().cpu().numpy()
@@ -219,8 +230,13 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                     outputs = test_data.inverse_transform(outputs.reshape(shape[0] * shape[1], -1)).reshape(shape)
                     batch_y = test_data.inverse_transform(batch_y.reshape(shape[0] * shape[1], -1)).reshape(shape)
         
-                outputs = outputs[:, :, :f_dim]
-                batch_y = batch_y[:, :, :f_dim]
+                f_dim = self.args.c_out
+                if self.args.use_npy:
+                    outputs = outputs[:, :, -f_dim:]
+                    batch_y = batch_y[:, :, -f_dim:]
+                else:
+                    outputs = outputs[:, :, :f_dim]
+                    batch_y = batch_y[:, :, :f_dim]
 
                 pred = outputs
                 true = batch_y
@@ -238,6 +254,16 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         # result save
         output_dir = '../result' + '/' + 'main_exp' + '/' + 'region'
         os.makedirs(output_dir, exist_ok=True)
+
+        if self.args.use_npy:
+            seq_num = test_data.seq_num
+            node_num = test_data.node_num
+            preds_reshaped = preds.reshape(seq_num, node_num, self.args.pred_len, -1)
+            trues_reshaped = trues.reshape(seq_num, node_num, self.args.pred_len, -1)
+            preds_reshaped = np.transpose(preds_reshaped[..., 0], (0, 2, 1))
+            trues_reshaped = np.transpose(trues_reshaped[..., 0], (0, 2, 1))
+            np.save(os.path.join(output_dir, f'pred_{args.model}.npy'), preds_reshaped)
+            np.save(os.path.join(output_dir, f'truth_{args.model}.npy'), trues_reshaped)
 
         result_list = []
 

@@ -17,6 +17,10 @@ def parse_args():
     parser.add_argument('--fold', type=int, default=0, help="The current fold number for training data")
     parser.add_argument('--pred_type', type=str, default='region', help="Prediction at node or regional level")
     parser.add_argument('--feat', type=str, default='occ', help="Which feature to use for prediction")
+    parser.add_argument('--use_npy', action='store_true', default=False, help="Use npy feature files")
+    parser.add_argument('--npy_train', type=str, default='../data/features_train_wea_poi.npy', help="Path to train npy file")
+    parser.add_argument('--npy_valid', type=str, default='../data/features_valid_wea_poi.npy', help="Path to valid npy file")
+    parser.add_argument('--npy_test', type=str, default='../data/features_test_wea_poi.npy', help="Path to test npy file")
 
     parser.add_argument('--is_train', action='store_true', default=True)
     # parser.add_argument('--is_train', action='store_true', default=False)

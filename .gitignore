@@ -14,3 +14,9 @@ result/main_exp/region/*
 .SynologyWorkingDirectory
 
 .vscode
+
+features/
+
+*.sh
+
+result/
