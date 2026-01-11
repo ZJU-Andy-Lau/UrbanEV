@@ -20,3 +20,5 @@ features/
 *.sh
 
 result/
+
+data/
