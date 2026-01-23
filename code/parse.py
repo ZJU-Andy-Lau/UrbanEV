@@ -21,6 +21,7 @@ def parse_args():
     parser.add_argument('--npy_train', type=str, default='../data/features_train_wea_poi.npy', help="Path to train npy file")
     parser.add_argument('--npy_valid', type=str, default='../data/features_valid_wea_poi.npy', help="Path to valid npy file")
     parser.add_argument('--npy_test', type=str, default='../data/features_test_wea_poi.npy', help="Path to test npy file")
+    parser.add_argument('--npy_use_aux', action='store_true', default=False, help="Use auxiliary features in npy files")
 
     parser.add_argument('--is_train', action='store_true', default=True)
     # parser.add_argument('--is_train', action='store_true', default=False)

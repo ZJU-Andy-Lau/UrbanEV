@@ -15,7 +15,7 @@ if __name__ == "__main__":
     device = torch.device("cpu")
 
     utils.set_seed(seed=args.seed, flag=True)
-    if args.use_npy and args.add_feat == 'None':
+    if args.use_npy and args.add_feat == 'None' and args.npy_use_aux:
         args.add_feat = 'npy'
     feat, adj, extra_feat, time= utils.read_data(args)
     print(

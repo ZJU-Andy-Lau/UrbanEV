@@ -115,12 +115,18 @@ def read_npy_data(args):
     test_data = np.load(args.npy_test)
 
     full_data = np.concatenate([train_data, valid_data, test_data], axis=0)
-    args.npy_feat_dim = full_data.shape[2]
+    if args.npy_use_aux:
+        args.npy_feat_dim = full_data.shape[2]
+    else:
+        args.npy_feat_dim = 1
     args.npy_train_len = train_data.shape[0]
     args.npy_valid_len = valid_data.shape[0]
     args.npy_test_len = test_data.shape[0]
     feat = full_data[:, :, 0]
-    extra_feat = full_data[:, :, 1:]
+    if args.npy_use_aux:
+        extra_feat = full_data[:, :, 1:]
+    else:
+        extra_feat = 'None'
     time = pd.to_datetime(np.arange(full_data.shape[0]), unit='h')
 
     adj = pd.read_csv('../data/adj.csv', header=0, index_col=None)
