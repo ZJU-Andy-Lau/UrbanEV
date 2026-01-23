@@ -15,6 +15,8 @@ if __name__ == "__main__":
     device = torch.device("cpu")
 
     utils.set_seed(seed=args.seed, flag=True)
+    if args.use_npy and args.add_feat == 'None':
+        args.add_feat = 'npy'
     feat, adj, extra_feat, time= utils.read_data(args)
     print(
         f"Running {args.model} with feat={args.feat}, pre_l={args.pred_len}, fold={args.fold}, add_feat={args.add_feat}, pred_type(node)={args.pred_type}")

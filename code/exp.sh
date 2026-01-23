@@ -10,7 +10,7 @@ EPOCH=20
 for m in "${models[@]}"; do
     for l in "${pred_lens[@]}"; do
         for f in "${folds[@]}"; do
-            python main.py --model "$m" --pred_len "$l" --fold "$f" --epoch "$EPOCH"
+            python main.py --model "$m" --pred_len "$l" --fold "$f" --epoch "$EPOCH" --use_npy
         done
     done
 done

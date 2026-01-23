@@ -18,8 +18,8 @@ class CreateDataset(Dataset):
         self.label = torch.Tensor(label)
 
         self.extra_feat = 'None'
-        if extra_feat != 'None':
-            extra_feat, _ = create_rnn_data(extra_feat,lb,pt)
+        if isinstance(extra_feat, np.ndarray):
+            extra_feat, _ = create_rnn_data_multi(extra_feat,lb,pt)
             self.extra_feat = torch.Tensor(extra_feat)
         self.device = device
 
@@ -28,9 +28,9 @@ class CreateDataset(Dataset):
 
     def __getitem__(self, idx):# occ: batch, seq, node
         output_occ = torch.transpose(self.occ[idx, :, :], 0, 1).to(self.device)
-        output_label = self.label[idx, :].to(self.device)
+        output_label = torch.transpose(self.label[idx, :, :], 0, 1).to(self.device)
         if self.extra_feat != 'None':
-            output_extra_feat = torch.transpose(self.extra_feat[idx, :, :], 0, 1).to(self.device)
+            output_extra_feat = torch.transpose(self.extra_feat[idx, :, :, :], 0, 1).to(self.device)
             return output_occ, output_label,output_extra_feat
         else:
             return output_occ, output_label
@@ -54,6 +54,8 @@ def read_data(args):
     """
     Read and preprocess the dataset for model input.
     """
+    if args.use_npy:
+        return read_npy_data(args)
 
     # Load datasets
     inf = pd.read_csv('../data/inf.csv', header=0, index_col=None)
@@ -108,6 +110,26 @@ def read_data(args):
     return np.array(feat), np.array(adj), extra_feat, time
 
 
+def read_npy_data(args):
+    train_data = np.load(args.npy_train)
+    valid_data = np.load(args.npy_valid)
+    test_data = np.load(args.npy_test)
+
+    full_data = np.concatenate([train_data, valid_data, test_data], axis=0)
+    args.npy_feat_dim = full_data.shape[2]
+    args.npy_train_len = train_data.shape[0]
+    args.npy_valid_len = valid_data.shape[0]
+    args.npy_test_len = test_data.shape[0]
+    feat = full_data[:, :, 0]
+    extra_feat = full_data[:, :, 1:]
+    time = pd.to_datetime(np.arange(full_data.shape[0]), unit='h')
+
+    adj = pd.read_csv('../data/adj.csv', header=0, index_col=None)
+    adj.index = adj.columns
+
+    return np.array(feat), np.array(adj), extra_feat, time
+
+
 def set_seed(seed, flag):
     if flag:
         torch.manual_seed(seed)
@@ -129,16 +151,19 @@ def division(data, train_rate=0.7, valid_rate=0.2, test_rate=0.1):
 def load_net(args, adj, device,occ):
     adj_dense  = torch.Tensor(adj).to(device)
     num_node = occ.shape[1] if args.pred_type =='region' else 1
-    n_fea = 1
-    if args.add_feat == 'all':
-        n_fea = 8
-    elif args.add_feat == 'None':
-        n_fea = 1
+    if args.use_npy:
+        n_fea = args.npy_feat_dim
     else:
-        for _ in args.add_feat.split('+'):
-            n_fea += 1
+        n_fea = 1
+        if args.add_feat == 'all':
+            n_fea = 8
+        elif args.add_feat == 'None':
+            n_fea = 1
+        else:
+            for _ in args.add_feat.split('+'):
+                n_fea += 1
     if args.model == 'lstm':
-        model = baselines.Lstm(args.seq_len, n_fea, node=num_node).to(device)
+        model = baselines.Lstm(args.seq_len, n_fea, node=num_node, pred_len=args.pred_len).to(device)
     elif args.model == 'lo':
         model = baselines.Lo(args)
     elif args.model == 'ar':
@@ -146,18 +171,27 @@ def load_net(args, adj, device,occ):
     elif args.model == 'arima':
         model = baselines.Arima(pred_len=args.pred_len,p=args.seq_len,args=args)
     elif args.model == 'fcnn':
-        model = baselines.Fcnn(n_fea, node=num_node, seq=args.seq_len).to(device)
+        model = baselines.Fcnn(n_fea, node=num_node, seq=args.seq_len, pred_len=args.pred_len).to(device)
     elif args.model == 'gcnlstm':
         model = baselines.Gcnlstm(args.seq_len,adj_dense=adj_dense,n_fea=n_fea, node=num_node,gcn_out=32, gcn_layers=1,lstm_hidden_dim=32, lstm_layers=1
-                 ,hidden_dim=32).to(device)
+                 ,hidden_dim=32, pred_len=args.pred_len).to(device)
     elif args.model == 'gcn':
-        model = baselines.Gcn(args.seq_len,n_fea=n_fea, adj_dense=adj_dense,gcn_hidden=32,gcn_layers=1).to(device)
+        model = baselines.Gcn(args.seq_len,n_fea=n_fea, adj_dense=adj_dense,gcn_hidden=32,gcn_layers=1, pred_len=args.pred_len).to(device)
     elif args.model == 'astgcn':
-        model = baselines.Astgcn(adj_dense=adj_dense,nb_block=1,in_channels=n_fea, K=1, nb_chev_filter=32, nb_time_filter=32, time_strides=1,num_for_predict=1,len_input=12,num_of_vertices=num_node).to(device)
+        model = baselines.Astgcn(adj_dense=adj_dense,nb_block=1,in_channels=n_fea, K=1, nb_chev_filter=32, nb_time_filter=32, time_strides=1,num_for_predict=args.pred_len,len_input=args.seq_len,num_of_vertices=num_node).to(device)
     return model
 
 
 def create_rnn_data(dataset, lookback, predict_time):
+    x = []
+    y = []
+    for i in range(len(dataset) - lookback - predict_time):
+        x.append(dataset[i:i + lookback])
+        y.append(dataset[i + lookback:i + lookback + predict_time])
+    return np.array(x), np.array(y)
+
+
+def create_rnn_data_multi(dataset, lookback, predict_time):
     x = []
     y = []
     for i in range(len(dataset) - lookback - predict_time):
@@ -168,24 +202,36 @@ def create_rnn_data(dataset, lookback, predict_time):
 
 def metrics(test_pre, test_real,args):
     eps = 2e-2
-    MAPE_test_real = test_real.copy()
-    MAPE_test_pre = test_pre.copy()
-    MAPE_test_real[np.where(MAPE_test_real <= eps)] = np.abs(MAPE_test_real[np.where(MAPE_test_real <= eps)]) + eps
-    MAPE_test_pre[np.where(MAPE_test_real <= eps)] = np.abs(MAPE_test_pre[np.where(MAPE_test_real <= eps)]) + eps
 
-    MAPE = mean_absolute_percentage_error(MAPE_test_real, MAPE_test_pre)
-    MAE = mean_absolute_error(test_real, test_pre)
-    MSE = mean_squared_error(test_real, test_pre)
-    RMSE = np.sqrt(MSE)
-    RAE = np.sum(abs(MAPE_test_pre - MAPE_test_real)) / np.sum(abs(np.mean(MAPE_test_real) - MAPE_test_real))
+    def calc_metrics(step_pre, step_real):
+        MAPE_test_real = step_real.copy()
+        MAPE_test_pre = step_pre.copy()
+        MAPE_test_real[np.where(MAPE_test_real <= eps)] = np.abs(MAPE_test_real[np.where(MAPE_test_real <= eps)]) + eps
+        MAPE_test_pre[np.where(MAPE_test_real <= eps)] = np.abs(MAPE_test_pre[np.where(MAPE_test_real <= eps)]) + eps
 
-    print('MAPE: {}'.format(MAPE))
-    print('MAE:{}'.format(MAE))
-    print('MSE:{}'.format(MSE))
-    print('RMSE:{}'.format(RMSE))
-    print(('RAE:{}'.format(RAE)))
-    output_list = [MSE, RMSE, MAPE, RAE, MAE]
-    return output_list
+        MAPE = mean_absolute_percentage_error(MAPE_test_real, MAPE_test_pre)
+        MAE = mean_absolute_error(step_real, step_pre)
+        MSE = mean_squared_error(step_real, step_pre)
+        RMSE = np.sqrt(MSE)
+        RAE = np.sum(abs(MAPE_test_pre - MAPE_test_real)) / np.sum(abs(np.mean(MAPE_test_real) - MAPE_test_real))
+        return [MSE, RMSE, MAPE, RAE, MAE]
+
+    if test_pre.ndim == 3:
+        overall = calc_metrics(test_pre.reshape(-1, test_pre.shape[-1]),
+                               test_real.reshape(-1, test_real.shape[-1]))
+        per_step = []
+        for step in range(test_pre.shape[1]):
+            per_step.append(calc_metrics(test_pre[:, step, :], test_real[:, step, :]))
+    else:
+        overall = calc_metrics(test_pre, test_real)
+        per_step = [overall]
+
+    print('MAPE: {}'.format(overall[2]))
+    print('MAE:{}'.format(overall[4]))
+    print('MSE:{}'.format(overall[0]))
+    print('RMSE:{}'.format(overall[1]))
+    print(('RAE:{}'.format(overall[3])))
+    return overall, per_step
 
 
 def split_cv(args,time, feat,train_ratio=0.8, valid_ratio=0.1, test_ratio=0.1,extra_feat='None'):
@@ -193,33 +239,40 @@ def split_cv(args,time, feat,train_ratio=0.8, valid_ratio=0.1, test_ratio=0.1,ex
     Split dataset based on time for time-series rolling cross-validation.
     """
     assert len(time) == len(feat)
-    fold = args.fold
-    month_list = list(time.month.unique())
-    assert args.total_fold == len(month_list)
-    fold_time = time.month.isin(month_list[0:fold]).sum()
+    if args.use_npy:
+        train_end = args.npy_train_len
+        valid_end = train_end + args.npy_valid_len
+        test_end = valid_end + args.npy_test_len
+        train_feat = feat[:train_end]
+        valid_feat = feat[train_end:valid_end]
+        test_feat = feat[valid_end:test_end]
+    else:
+        fold = args.fold
+        month_list = list(time.month.unique())
+        assert args.total_fold == len(month_list)
+        fold_time = time.month.isin(month_list[0:fold]).sum()
 
-    train_end = int(fold_time * train_ratio)
-    valid_start = train_end
-    valid_end = int(valid_start + fold_time * valid_ratio)
-    test_start = valid_end
-    test_end = int(fold_time)
+        train_end = int(fold_time * train_ratio)
+        valid_start = train_end
+        valid_end = int(valid_start + fold_time * valid_ratio)
+        test_start = valid_end
+        test_end = int(fold_time)
 
-
-    train_feat = feat[:train_end]
-    valid_feat = feat[valid_start:valid_end]
-    test_feat = feat[test_start:test_end]
+        train_feat = feat[:train_end]
+        valid_feat = feat[valid_start:valid_end]
+        test_feat = feat[test_start:test_end]
 
     scaler = 'None'
 
     if args.pred_type == 'region':
-        if args.feat != 'occ':
+        if args.feat != 'occ' and not args.use_npy:
             scaler = StandardScaler()
             train_feat = scaler.fit_transform(train_feat)
             valid_feat = scaler.transform(valid_feat)
             test_feat = scaler.transform(test_feat)
     else:
         node_idx = int(args.pred_type)
-        if args.feat != 'occ':
+        if args.feat != 'occ' and not args.use_npy:
             scaler = StandardScaler()
             train_feat = scaler.fit_transform(train_feat[:,node_idx].reshape(-1,1))
             valid_feat = scaler.transform(valid_feat[:,node_idx].reshape(-1,1))
@@ -230,9 +283,14 @@ def split_cv(args,time, feat,train_ratio=0.8, valid_ratio=0.1, test_ratio=0.1,ex
             test_feat = test_feat[:, node_idx].reshape(-1, 1)
 
     train_extra_feat, valid_extra_feat, test_extra_feat = 'None','None','None'
-    if extra_feat != 'None':
-        train_extra_feat = extra_feat[:train_end]
-        valid_extra_feat = extra_feat[valid_start:valid_end]
-        test_extra_feat = extra_feat[test_start:test_end]
+    if isinstance(extra_feat, np.ndarray):
+        if args.use_npy:
+            train_extra_feat = extra_feat[:train_end]
+            valid_extra_feat = extra_feat[train_end:valid_end]
+            test_extra_feat = extra_feat[valid_end:test_end]
+        else:
+            train_extra_feat = extra_feat[:train_end]
+            valid_extra_feat = extra_feat[valid_start:valid_end]
+            test_extra_feat = extra_feat[test_start:test_end]
 
     return train_feat, valid_feat, test_feat, train_extra_feat, valid_extra_feat, test_extra_feat,scaler

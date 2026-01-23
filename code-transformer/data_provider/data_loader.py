@@ -4,6 +4,7 @@ from torch.utils.data import Dataset
 from sklearn.preprocessing import StandardScaler
 from utils.timefeatures import time_features
 import warnings
+import numpy as np
 
 warnings.filterwarnings('ignore')
 
@@ -119,3 +120,65 @@ class Dataset_Custom(Dataset):
 
     def inverse_transform(self, data):
         return self.scaler.inverse_transform(data)
+
+
+class Dataset_NPY(Dataset):
+    def __init__(self, args, root_path, flag='train', size=None,
+                 features='M', data_path=None,
+                 target='OT', scale=False, timeenc=0, freq='h', fold='None', total_fold='None'):
+        self.args = args
+        if size is None:
+            self.seq_len = 24 * 4 * 4
+            self.label_len = 24 * 4
+            self.pred_len = 24 * 4
+        else:
+            self.seq_len = size[0]
+            self.label_len = size[1]
+            self.pred_len = size[2]
+
+        assert flag in ['train', 'test', 'val']
+        self.flag = flag
+        self.features = features
+        self.scale = scale
+        self.timeenc = timeenc
+        self.freq = freq
+        self.root_path = root_path
+        self.data_path = data_path
+        self.__read_data__()
+
+    def __read_data__(self):
+        if self.flag == 'train':
+            data = np.load(self.args.npy_train)
+        elif self.flag == 'val':
+            data = np.load(self.args.npy_valid)
+        else:
+            data = np.load(self.args.npy_test)
+
+        data = np.concatenate([data[:, :, 1:], data[:, :, :1]], axis=2)
+        self.data_x = data
+        self.data_y = data[:, :, -1:]
+        self.seq_num = data.shape[0] - self.seq_len - self.pred_len + 1
+        self.node_num = data.shape[1]
+
+        x_mark = np.zeros((data.shape[0], 4), dtype=np.float32)
+        self.data_stamp = x_mark
+
+    def __getitem__(self, index):
+        node_idx = index % self.node_num
+        time_idx = index // self.node_num
+        s_begin = time_idx
+        s_end = s_begin + self.seq_len
+        r_begin = s_end - self.label_len
+        r_end = r_begin + self.label_len + self.pred_len
+
+        seq_x = self.data_x[s_begin:s_end, node_idx, :]
+        seq_y = self.data_y[r_begin:r_end, node_idx, :]
+        seq_x_mark = self.data_stamp[s_begin:s_end]
+        seq_y_mark = self.data_stamp[r_begin:r_end]
+        return seq_x, seq_y, seq_x_mark, seq_y_mark
+
+    def __len__(self):
+        return self.seq_num * self.node_num
+
+    def inverse_transform(self, data):
+        return data
