@@ -17,20 +17,22 @@ if __name__ == "__main__":
     utils.set_seed(seed=args.seed, flag=True)
     if args.use_npy and args.add_feat == 'None' and args.npy_use_aux:
         args.add_feat = 'npy'
-    feat, adj, extra_feat, time= utils.read_data(args)
+    feat, adj, extra_feat, time, scaler = utils.read_data(args)
     print(
         f"Running {args.model} with feat={args.feat}, pre_l={args.pred_len}, fold={args.fold}, add_feat={args.add_feat}, pred_type(node)={args.pred_type}")
 
     # Initialize and train model
     net = utils.load_net(args, np.array(adj), device, feat)
 
-    train_feat, valid_feat, test_feat, train_extra_feat, valid_extra_feat, test_extra_feat,scaler = split_cv(args,
+    train_feat, valid_feat, test_feat, train_extra_feat, valid_extra_feat, test_extra_feat, cv_scaler = split_cv(args,
                                                                                                    time,
                                                                                                    feat,
                                                                                                    TRAIN_RATIO,
                                                                                                  VAL_RATIO,
                                                                                                    TEST_RATIO,
                                                                                                    extra_feat)
+    if scaler == 'None':
+        scaler = cv_scaler
     train_loader, valid_loader, test_loader = create_loaders(train_feat, valid_feat, test_feat,
                                                              train_extra_feat, valid_extra_feat,
                                                              test_extra_feat,

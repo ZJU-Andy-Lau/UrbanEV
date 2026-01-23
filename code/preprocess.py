@@ -12,7 +12,7 @@ args.add_feat = 'None'
 args.pred_type = 'region'
 
 # process
-feat, adj, extra_feat, time = read_data(args)
+feat, adj, extra_feat, time, _ = read_data(args)
 data = pd.DataFrame(feat)
 columns = ['OT'] + [str(i) for i in range(1, data.shape[1])]
 data.columns = columns

@@ -106,7 +106,7 @@ def read_data(args):
                                              np.repeat(weather[add_feat].values[:, np.newaxis, np.newaxis], occ.shape[1], axis=1)], axis=2)
         extra_feat = extra_feat[:, :, 1:]
 
-    return np.array(feat), np.array(adj), extra_feat, time
+    return np.array(feat), np.array(adj), extra_feat, time, 'None'
 
 
 def read_npy_data(args):
@@ -167,7 +167,7 @@ def read_npy_data(args):
     adj = pd.read_csv('../data/adj.csv', header=0, index_col=None)
     adj.index = adj.columns
 
-    return np.array(feat), np.array(adj), extra_feat, time
+    return np.array(feat), np.array(adj), extra_feat, time, scaler_y
 
 
 def set_seed(seed, flag):
