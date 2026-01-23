@@ -27,7 +27,7 @@ class CreateDataset(Dataset):
 
     def __getitem__(self, idx):# occ: batch, seq, node
         output_occ = torch.transpose(self.occ[idx, :, :], 0, 1).to(self.device)
-        output_label = self.label[idx, :].to(self.device)
+        output_label = self.label[idx, :].transpose(0, 1).to(self.device)
         if self.extra_feat != 'None':
             output_extra_feat = torch.transpose(self.extra_feat[idx, :, :, :], 0, 1).to(self.device)
             return output_occ, output_label,output_extra_feat
@@ -106,7 +106,7 @@ def read_data(args):
                                              np.repeat(weather[add_feat].values[:, np.newaxis, np.newaxis], occ.shape[1], axis=1)], axis=2)
         extra_feat = extra_feat[:, :, 1:]
 
-    return np.array(feat), np.array(adj), extra_feat, time
+    return np.array(feat), np.array(adj), extra_feat, time, 'None'
 
 
 def read_npy_data(args):
@@ -115,18 +115,59 @@ def read_npy_data(args):
     test_data = np.load(args.npy_test)
 
     full_data = np.concatenate([train_data, valid_data, test_data], axis=0)
-    args.npy_feat_dim = full_data.shape[2]
+    train_target = train_data[:, :, 0]
+    minmax_features = train_data[:, :, args.npy_minmax_start:args.npy_minmax_end]
+    zscore_features = train_data[:, :, args.npy_zscore_start:]
+
+    if args.npy_norm_type == 'minmax':
+        scaler_y = MinMaxScaler(feature_range=(-1, 1))
+        scaler_y.fit(train_target.reshape(-1, 1))
+    elif args.npy_norm_type == 'zscore':
+        scaler_y = StandardScaler()
+        scaler_y.fit(train_target.reshape(-1, 1))
+    else:
+        scaler_y = None
+
+    scaler_mm = MinMaxScaler(feature_range=(-1, 1))
+    if minmax_features.size > 0:
+        scaler_mm.fit(minmax_features.reshape(-1, minmax_features.shape[-1]))
+
+    scaler_z = StandardScaler()
+    if zscore_features.size > 0:
+        scaler_z.fit(zscore_features.reshape(-1, zscore_features.shape[-1]))
+    if args.npy_use_aux:
+        args.npy_feat_dim = full_data.shape[2]
+    else:
+        args.npy_feat_dim = 1
     args.npy_train_len = train_data.shape[0]
     args.npy_valid_len = valid_data.shape[0]
     args.npy_test_len = test_data.shape[0]
+    if scaler_y is not None:
+        target_reshaped = full_data[:, :, 0].reshape(-1, 1)
+        target_norm = scaler_y.transform(target_reshaped).reshape(full_data.shape[0], full_data.shape[1])
+        full_data[:, :, 0] = target_norm
+
+    if args.npy_minmax_end > args.npy_minmax_start and minmax_features.size > 0:
+        mm_slice = full_data[:, :, args.npy_minmax_start:args.npy_minmax_end]
+        mm_norm = scaler_mm.transform(mm_slice.reshape(-1, mm_slice.shape[-1])).reshape(mm_slice.shape)
+        full_data[:, :, args.npy_minmax_start:args.npy_minmax_end] = mm_norm
+
+    if zscore_features.size > 0:
+        z_slice = full_data[:, :, args.npy_zscore_start:]
+        z_norm = scaler_z.transform(z_slice.reshape(-1, z_slice.shape[-1])).reshape(z_slice.shape)
+        full_data[:, :, args.npy_zscore_start:] = z_norm
+
     feat = full_data[:, :, 0]
-    extra_feat = full_data[:, :, 1:]
+    if args.npy_use_aux:
+        extra_feat = full_data[:, :, 1:]
+    else:
+        extra_feat = 'None'
     time = pd.to_datetime(np.arange(full_data.shape[0]), unit='h')
 
     adj = pd.read_csv('../data/adj.csv', header=0, index_col=None)
     adj.index = adj.columns
 
-    return np.array(feat), np.array(adj), extra_feat, time
+    return np.array(feat), np.array(adj), extra_feat, time, scaler_y
 
 
 def set_seed(seed, flag):
@@ -170,7 +211,7 @@ def load_net(args, adj, device,occ):
     elif args.model == 'arima':
         model = baselines.Arima(pred_len=args.pred_len,p=args.seq_len,args=args)
     elif args.model == 'fcnn':
-        model = baselines.Fcnn(n_fea, node=num_node, seq=args.seq_len).to(device)
+        model = baselines.Fcnn(n_fea, node=num_node, seq=args.seq_len, pred_len=args.pred_len).to(device)
     elif args.model == 'gcnlstm':
         model = baselines.Gcnlstm(args.seq_len,adj_dense=adj_dense,n_fea=n_fea, node=num_node,gcn_out=32, gcn_layers=1,lstm_hidden_dim=32, lstm_layers=1
                  ,hidden_dim=32).to(device)
@@ -186,7 +227,7 @@ def create_rnn_data(dataset, lookback, predict_time):
     y = []
     for i in range(len(dataset) - lookback - predict_time):
         x.append(dataset[i:i + lookback])
-        y.append(dataset[i + lookback + predict_time - 1])
+        y.append(dataset[i + lookback:i + lookback + predict_time])
     return np.array(x), np.array(y)
 
 
@@ -195,7 +236,7 @@ def create_rnn_data_multi(dataset, lookback, predict_time):
     y = []
     for i in range(len(dataset) - lookback - predict_time):
         x.append(dataset[i:i + lookback])
-        y.append(dataset[i + lookback + predict_time - 1])
+        y.append(dataset[i + lookback:i + lookback + predict_time])
     return np.array(x), np.array(y)
 
 

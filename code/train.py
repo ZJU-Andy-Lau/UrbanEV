@@ -83,8 +83,11 @@ def test(args, test_loader, occ,net,scaler='None'):
                 'node-' + str(args.pred_type) + '_' +
                 'add_feat-' + str(args.add_feat) + '_' +
                 'epoch-' + str(args.epoch) + '.pth')
-        state_dict = torch.load(path,weights_only=True)
-        net.load_state_dict(state_dict)
+        if os.path.exists(path):
+            state_dict = torch.load(path, weights_only=True)
+            net.load_state_dict(state_dict)
+        else:
+            print(f"[WARN] Checkpoint not found at {path}. Using current in-memory model weights.")
         net.eval()
         for j, data in enumerate(test_loader):
             extra_feat = 'None'
