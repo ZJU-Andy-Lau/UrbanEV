@@ -115,6 +115,26 @@ def read_npy_data(args):
     test_data = np.load(args.npy_test)
 
     full_data = np.concatenate([train_data, valid_data, test_data], axis=0)
+    train_target = train_data[:, :, 0]
+    minmax_features = train_data[:, :, args.npy_minmax_start:args.npy_minmax_end]
+    zscore_features = train_data[:, :, args.npy_zscore_start:]
+
+    if args.npy_norm_type == 'minmax':
+        scaler_y = MinMaxScaler(feature_range=(-1, 1))
+        scaler_y.fit(train_target.reshape(-1, 1))
+    elif args.npy_norm_type == 'zscore':
+        scaler_y = StandardScaler()
+        scaler_y.fit(train_target.reshape(-1, 1))
+    else:
+        scaler_y = None
+
+    scaler_mm = MinMaxScaler(feature_range=(-1, 1))
+    if minmax_features.size > 0:
+        scaler_mm.fit(minmax_features.reshape(-1, minmax_features.shape[-1]))
+
+    scaler_z = StandardScaler()
+    if zscore_features.size > 0:
+        scaler_z.fit(zscore_features.reshape(-1, zscore_features.shape[-1]))
     if args.npy_use_aux:
         args.npy_feat_dim = full_data.shape[2]
     else:
@@ -122,6 +142,21 @@ def read_npy_data(args):
     args.npy_train_len = train_data.shape[0]
     args.npy_valid_len = valid_data.shape[0]
     args.npy_test_len = test_data.shape[0]
+    if scaler_y is not None:
+        target_reshaped = full_data[:, :, 0].reshape(-1, 1)
+        target_norm = scaler_y.transform(target_reshaped).reshape(full_data.shape[0], full_data.shape[1])
+        full_data[:, :, 0] = target_norm
+
+    if args.npy_minmax_end > args.npy_minmax_start and minmax_features.size > 0:
+        mm_slice = full_data[:, :, args.npy_minmax_start:args.npy_minmax_end]
+        mm_norm = scaler_mm.transform(mm_slice.reshape(-1, mm_slice.shape[-1])).reshape(mm_slice.shape)
+        full_data[:, :, args.npy_minmax_start:args.npy_minmax_end] = mm_norm
+
+    if zscore_features.size > 0:
+        z_slice = full_data[:, :, args.npy_zscore_start:]
+        z_norm = scaler_z.transform(z_slice.reshape(-1, z_slice.shape[-1])).reshape(z_slice.shape)
+        full_data[:, :, args.npy_zscore_start:] = z_norm
+
     feat = full_data[:, :, 0]
     if args.npy_use_aux:
         extra_feat = full_data[:, :, 1:]
