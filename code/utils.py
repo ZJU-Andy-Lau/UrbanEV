@@ -27,7 +27,7 @@ class CreateDataset(Dataset):
 
     def __getitem__(self, idx):# occ: batch, seq, node
         output_occ = torch.transpose(self.occ[idx, :, :], 0, 1).to(self.device)
-        output_label = self.label[idx, :].to(self.device)
+        output_label = self.label[idx, :].transpose(0, 1).to(self.device)
         if self.extra_feat != 'None':
             output_extra_feat = torch.transpose(self.extra_feat[idx, :, :, :], 0, 1).to(self.device)
             return output_occ, output_label,output_extra_feat
@@ -192,7 +192,7 @@ def create_rnn_data(dataset, lookback, predict_time):
     y = []
     for i in range(len(dataset) - lookback - predict_time):
         x.append(dataset[i:i + lookback])
-        y.append(dataset[i + lookback + predict_time - 1])
+        y.append(dataset[i + lookback:i + lookback + predict_time])
     return np.array(x), np.array(y)
 
 
@@ -201,7 +201,7 @@ def create_rnn_data_multi(dataset, lookback, predict_time):
     y = []
     for i in range(len(dataset) - lookback - predict_time):
         x.append(dataset[i:i + lookback])
-        y.append(dataset[i + lookback + predict_time - 1])
+        y.append(dataset[i + lookback:i + lookback + predict_time])
     return np.array(x), np.array(y)
 
 
