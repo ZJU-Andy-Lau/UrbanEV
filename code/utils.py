@@ -176,7 +176,7 @@ def load_net(args, adj, device,occ):
     elif args.model == 'arima':
         model = baselines.Arima(pred_len=args.pred_len,p=args.seq_len,args=args)
     elif args.model == 'fcnn':
-        model = baselines.Fcnn(n_fea, node=num_node, seq=args.seq_len).to(device)
+        model = baselines.Fcnn(n_fea, node=num_node, seq=args.seq_len, pred_len=args.pred_len).to(device)
     elif args.model == 'gcnlstm':
         model = baselines.Gcnlstm(args.seq_len,adj_dense=adj_dense,n_fea=n_fea, node=num_node,gcn_out=32, gcn_layers=1,lstm_hidden_dim=32, lstm_layers=1
                  ,hidden_dim=32).to(device)
