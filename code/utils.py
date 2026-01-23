@@ -1,4 +1,3 @@
-
 import torch 
 import pandas as pd 
 import numpy as np
@@ -202,24 +201,36 @@ def create_rnn_data_multi(dataset, lookback, predict_time):
 
 def metrics(test_pre, test_real,args):
     eps = 2e-2
-    MAPE_test_real = test_real.copy()
-    MAPE_test_pre = test_pre.copy()
-    MAPE_test_real[np.where(MAPE_test_real <= eps)] = np.abs(MAPE_test_real[np.where(MAPE_test_real <= eps)]) + eps
-    MAPE_test_pre[np.where(MAPE_test_real <= eps)] = np.abs(MAPE_test_pre[np.where(MAPE_test_real <= eps)]) + eps
 
-    MAPE = mean_absolute_percentage_error(MAPE_test_real, MAPE_test_pre)
-    MAE = mean_absolute_error(test_real, test_pre)
-    MSE = mean_squared_error(test_real, test_pre)
-    RMSE = np.sqrt(MSE)
-    RAE = np.sum(abs(MAPE_test_pre - MAPE_test_real)) / np.sum(abs(np.mean(MAPE_test_real) - MAPE_test_real))
+    def calc_metrics(step_pre, step_real):
+        MAPE_test_real = step_real.copy()
+        MAPE_test_pre = step_pre.copy()
+        MAPE_test_real[np.where(MAPE_test_real <= eps)] = np.abs(MAPE_test_real[np.where(MAPE_test_real <= eps)]) + eps
+        MAPE_test_pre[np.where(MAPE_test_real <= eps)] = np.abs(MAPE_test_pre[np.where(MAPE_test_real <= eps)]) + eps
 
-    print('MAPE: {}'.format(MAPE))
-    print('MAE:{}'.format(MAE))
-    print('MSE:{}'.format(MSE))
-    print('RMSE:{}'.format(RMSE))
-    print(('RAE:{}'.format(RAE)))
-    output_list = [MSE, RMSE, MAPE, RAE, MAE]
-    return output_list
+        MAPE = mean_absolute_percentage_error(MAPE_test_real, MAPE_test_pre)
+        MAE = mean_absolute_error(step_real, step_pre)
+        MSE = mean_squared_error(step_real, step_pre)
+        RMSE = np.sqrt(MSE)
+        RAE = np.sum(abs(MAPE_test_pre - MAPE_test_real)) / np.sum(abs(np.mean(MAPE_test_real) - MAPE_test_real))
+        return [MSE, RMSE, MAPE, RAE, MAE]
+
+    if test_pre.ndim == 3:
+        overall = calc_metrics(test_pre.reshape(-1, test_pre.shape[-1]),
+                               test_real.reshape(-1, test_real.shape[-1]))
+        per_step = []
+        for step in range(test_pre.shape[1]):
+            per_step.append(calc_metrics(test_pre[:, step, :], test_real[:, step, :]))
+    else:
+        overall = calc_metrics(test_pre, test_real)
+        per_step = [overall]
+
+    print('MAPE: {}'.format(overall[2]))
+    print('MAE:{}'.format(overall[4]))
+    print('MSE:{}'.format(overall[0]))
+    print('RMSE:{}'.format(overall[1]))
+    print(('RAE:{}'.format(overall[3])))
+    return overall, per_step
 
 
 def split_cv(args,time, feat,train_ratio=0.8, valid_ratio=0.1, test_ratio=0.1,extra_feat='None'):
@@ -280,6 +291,5 @@ def split_cv(args,time, feat,train_ratio=0.8, valid_ratio=0.1, test_ratio=0.1,ex
             train_extra_feat = extra_feat[:train_end]
             valid_extra_feat = extra_feat[valid_start:valid_end]
             test_extra_feat = extra_feat[test_start:test_end]
-
 
     return train_feat, valid_feat, test_feat, train_extra_feat, valid_extra_feat, test_extra_feat,scaler
