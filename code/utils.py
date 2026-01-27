@@ -27,7 +27,7 @@ class CreateDataset(Dataset):
 
     def __getitem__(self, idx):# occ: batch, seq, node
         output_occ = torch.transpose(self.occ[idx, :, :], 0, 1).to(self.device)
-        output_label = self.label[idx, :].to(self.device)
+        output_label = torch.transpose(self.label[idx, :, :], 0, 1).to(self.device)
         if self.extra_feat != 'None':
             output_extra_feat = torch.transpose(self.extra_feat[idx, :, :, :], 0, 1).to(self.device)
             return output_occ, output_label,output_extra_feat
@@ -162,7 +162,7 @@ def load_net(args, adj, device,occ):
             for _ in args.add_feat.split('+'):
                 n_fea += 1
     if args.model == 'lstm':
-        model = baselines.Lstm(args.seq_len, n_fea, node=num_node).to(device)
+        model = baselines.Lstm(args.seq_len, n_fea, node=num_node, pred_len=args.pred_len).to(device)
     elif args.model == 'lo':
         model = baselines.Lo(args)
     elif args.model == 'ar':
@@ -170,18 +170,27 @@ def load_net(args, adj, device,occ):
     elif args.model == 'arima':
         model = baselines.Arima(pred_len=args.pred_len,p=args.seq_len,args=args)
     elif args.model == 'fcnn':
-        model = baselines.Fcnn(n_fea, node=num_node, seq=args.seq_len).to(device)
+        model = baselines.Fcnn(n_fea, node=num_node, seq=args.seq_len, pred_len=args.pred_len).to(device)
     elif args.model == 'gcnlstm':
         model = baselines.Gcnlstm(args.seq_len,adj_dense=adj_dense,n_fea=n_fea, node=num_node,gcn_out=32, gcn_layers=1,lstm_hidden_dim=32, lstm_layers=1
-                 ,hidden_dim=32).to(device)
+                 ,hidden_dim=32, pred_len=args.pred_len).to(device)
     elif args.model == 'gcn':
-        model = baselines.Gcn(args.seq_len,n_fea=n_fea, adj_dense=adj_dense,gcn_hidden=32,gcn_layers=1).to(device)
+        model = baselines.Gcn(args.seq_len,n_fea=n_fea, adj_dense=adj_dense,gcn_hidden=32,gcn_layers=1, pred_len=args.pred_len).to(device)
     elif args.model == 'astgcn':
-        model = baselines.Astgcn(adj_dense=adj_dense,nb_block=1,in_channels=n_fea, K=1, nb_chev_filter=32, nb_time_filter=32, time_strides=1,num_for_predict=1,len_input=12,num_of_vertices=num_node).to(device)
+        model = baselines.Astgcn(adj_dense=adj_dense,nb_block=1,in_channels=n_fea, K=1, nb_chev_filter=32, nb_time_filter=32, time_strides=1,num_for_predict=args.pred_len,len_input=args.seq_len,num_of_vertices=num_node).to(device)
     return model
 
 
 def create_rnn_data(dataset, lookback, predict_time):
+    x = []
+    y = []
+    for i in range(len(dataset) - lookback - predict_time):
+        x.append(dataset[i:i + lookback])
+        y.append(dataset[i + lookback:i + lookback + predict_time])
+    return np.array(x), np.array(y)
+
+
+def create_rnn_data_multi(dataset, lookback, predict_time):
     x = []
     y = []
     for i in range(len(dataset) - lookback - predict_time):
